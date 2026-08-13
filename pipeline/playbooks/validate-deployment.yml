@@ -1,0 +1,64 @@
+---
+- name: Validate Wazuh and CTI deployment
+  hosts: wazuh_server
+  become: true
+
+  tasks:
+    - name: Check Wazuh manager service
+      ansible.builtin.command:
+        cmd: systemctl is-active wazuh-manager
+      register: manager_status
+      changed_when: false
+
+    - name: Check Wazuh indexer service
+      ansible.builtin.command:
+        cmd: systemctl is-active wazuh-indexer
+      register: indexer_status
+      changed_when: false
+
+    - name: Check Wazuh dashboard service
+      ansible.builtin.command:
+        cmd: systemctl is-active wazuh-dashboard
+      register: dashboard_status
+      changed_when: false
+
+    - name: Validate Wazuh configuration
+      ansible.builtin.command:
+        cmd: /var/ossec/bin/wazuh-analysisd -t
+      changed_when: false
+
+    - name: Check custom OTX wrapper
+      ansible.builtin.stat:
+        path: /var/ossec/integrations/custom-otx
+      register: otx_wrapper
+
+    - name: Check CTI rules
+      ansible.builtin.stat:
+        path: /var/ossec/etc/rules/cti_rules.xml
+      register: cti_rules
+
+    - name: Check connected Wazuh agents
+      ansible.builtin.command:
+        cmd: /var/ossec/bin/agent_control -lc
+      register: connected_agents
+      changed_when: false
+
+    - name: Stop if CTI files are missing
+      ansible.builtin.assert:
+        that:
+          - otx_wrapper.stat.exists
+          - otx_wrapper.stat.executable
+          - cti_rules.stat.exists
+        fail_msg: "One or more CTI integration files are missing."
+        success_msg: "CTI integration files are installed correctly."
+
+    - name: Display service status
+      ansible.builtin.debug:
+        msg:
+          - "Wazuh manager: {{ manager_status.stdout }}"
+          - "Wazuh indexer: {{ indexer_status.stdout }}"
+          - "Wazuh dashboard: {{ dashboard_status.stdout }}"
+
+    - name: Display connected agents
+      ansible.builtin.debug:
+        var: connected_agents.stdout_lines
