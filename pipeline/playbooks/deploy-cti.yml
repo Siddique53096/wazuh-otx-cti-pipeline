@@ -1,0 +1,105 @@
+---
+- name: Deploy OTX CTI integration to Wazuh
+  hosts: wazuh_server
+  become: true
+
+  vars:
+    cti_minimum_alert_level: 7
+    project_root: "{{ playbook_dir }}/../.."
+
+  tasks:
+    - name: Check whether Wazuh is installed
+      ansible.builtin.stat:
+        path: /var/ossec/bin/wazuh-control
+      register: wazuh_installation
+
+    - name: Stop when Wazuh is unavailable
+      ansible.builtin.fail:
+        msg: "Wazuh is not installed on the target server."
+      when: not wazuh_installation.stat.exists
+
+    - name: Create CTI module directory
+      ansible.builtin.file:
+        path: /var/ossec/integrations/cti
+        state: directory
+        owner: root
+        group: wazuh
+        mode: "0750"
+
+    - name: Copy CTI Python modules
+      ansible.builtin.copy:
+        src: "{{ project_root }}/cti/{{ item }}"
+        dest: "/var/ossec/integrations/cti/{{ item }}"
+        owner: root
+        group: wazuh
+        mode: "0640"
+      loop:
+        - ioc_extractor.py
+        - otx_client.py
+        - normalizer.py
+        - enrich_alert.py
+
+    - name: Copy custom OTX wrapper
+      ansible.builtin.copy:
+        src: "{{ project_root }}/wazuh/integrations/custom-otx"
+        dest: /var/ossec/integrations/custom-otx
+        owner: root
+        group: wazuh
+        mode: "0750"
+
+    - name: Copy CTI detection rules
+      ansible.builtin.copy:
+        src: "{{ project_root }}/wazuh/rules/cti_rules.xml"
+        dest: /var/ossec/etc/rules/cti_rules.xml
+        owner: root
+        group: wazuh
+        mode: "0640"
+
+    - name: Create Wazuh systemd override directory
+      ansible.builtin.file:
+        path: /etc/systemd/system/wazuh-manager.service.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Configure CTI environment variables
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/wazuh-manager.service.d/cti.conf
+        owner: root
+        group: root
+        mode: "0600"
+        content: |
+          [Service]
+          Environment="OTX_API_KEY={{ otx_api_key }}"
+          Environment="OTX_BASE_URL=https://otx.alienvault.com/api/v1"
+          Environment="CTI_REQUEST_TIMEOUT=10"
+      no_log: true
+
+    - name: Add OTX integration to Wazuh configuration
+      ansible.builtin.blockinfile:
+        path: /var/ossec/etc/ossec.conf
+        insertbefore: "</ossec_config>"
+        marker: "<!-- {mark} MANAGED OTX CTI INTEGRATION -->"
+        backup: true
+        block: |
+          <integration>
+            <name>custom-otx</name>
+            <alert_format>json</alert_format>
+            <level>{{ cti_minimum_alert_level }}</level>
+          </integration>
+
+    - name: Validate Wazuh configuration
+      ansible.builtin.command:
+        cmd: /var/ossec/bin/wazuh-analysisd -t
+      changed_when: false
+
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Restart Wazuh manager
+      ansible.builtin.systemd:
+        name: wazuh-manager
+        state: restarted
+        enabled: true

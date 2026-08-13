@@ -1,0 +1,79 @@
+---
+- name: Install Wazuh all-in-one server
+  hosts: wazuh_server
+  become: true
+
+  vars:
+    wazuh_repository_version: "4.14"
+
+  tasks:
+    - name: Check whether Wazuh is already installed
+      ansible.builtin.stat:
+        path: /var/ossec/bin/wazuh-control
+      register: wazuh_installation
+
+    - name: Display existing installation status
+      ansible.builtin.debug:
+        msg: "Wazuh is already installed; installation will be skipped."
+      when: wazuh_installation.stat.exists
+
+    - name: Check available disk space
+      ansible.builtin.shell: |
+        set -o pipefail
+        df --output=avail -k / | tail -1
+      args:
+        executable: /bin/bash
+      register: available_disk
+      changed_when: false
+      when: not wazuh_installation.stat.exists
+
+    - name: Stop when available storage is below 20 GB
+      ansible.builtin.fail:
+        msg: "At least 20 GB of free storage is required for this lab deployment."
+      when:
+        - not wazuh_installation.stat.exists
+        - available_disk.stdout | int < 20971520
+
+    - name: Install required packages
+      ansible.builtin.apt:
+        name:
+          - curl
+          - ca-certificates
+          - tar
+        state: present
+        update_cache: true
+      when: not wazuh_installation.stat.exists
+
+    - name: Download Wazuh installation assistant
+      ansible.builtin.get_url:
+        url: >-
+          https://packages.wazuh.com/{{ wazuh_repository_version }}/wazuh-install.sh
+        dest: /tmp/wazuh-install.sh
+        owner: root
+        group: root
+        mode: "0750"
+      when: not wazuh_installation.stat.exists
+
+    - name: Install Wazuh all-in-one
+      ansible.builtin.command:
+        cmd: bash /tmp/wazuh-install.sh -a
+      register: wazuh_install_result
+      when: not wazuh_installation.stat.exists
+
+    - name: Ensure Wazuh manager is running
+      ansible.builtin.systemd:
+        name: wazuh-manager
+        state: started
+        enabled: true
+
+    - name: Ensure Wazuh indexer is running
+      ansible.builtin.systemd:
+        name: wazuh-indexer
+        state: started
+        enabled: true
+
+    - name: Ensure Wazuh dashboard is running
+      ansible.builtin.systemd:
+        name: wazuh-dashboard
+        state: started
+        enabled: true

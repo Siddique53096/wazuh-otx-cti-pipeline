@@ -1,0 +1,23 @@
+<group name="cti,otx,threat_intelligence,">
+
+  <rule id="100500" level="3">
+    <decoded_as>json</decoded_as>
+    <field name="integration">^otx$</field>
+    <description>AlienVault OTX CTI enrichment received</description>
+  </rule>
+
+  <rule id="100501" level="12">
+    <if_sid>100500</if_sid>
+    <field name="cti.matched">^true$</field>
+    <description>Threat intelligence match found in AlienVault OTX</description>
+    <group>cti_match,incident_candidate,</group>
+  </rule>
+
+  <rule id="100502" level="3">
+    <if_sid>100500</if_sid>
+    <field name="cti.matched">^false$</field>
+    <description>No threat intelligence match found in AlienVault OTX</description>
+    <group>cti_no_match,</group>
+  </rule>
+
+</group>

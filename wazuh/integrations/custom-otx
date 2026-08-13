@@ -1,0 +1,65 @@
+#!/var/ossec/framework/python/bin/python3
+
+import json
+import socket
+import sys
+
+sys.path.insert(0, "/var/ossec/integrations/cti")
+
+from enrich_alert import enrich_alert
+
+
+WAZUH_QUEUE = "/var/ossec/queue/sockets/queue"
+
+
+def send_to_wazuh(event):
+    message = (
+        "1:custom-otx:"
+        + json.dumps(event, separators=(",", ":"))
+    )
+
+    queue_socket = socket.socket(
+        socket.AF_UNIX,
+        socket.SOCK_DGRAM
+    )
+
+    try:
+        queue_socket.connect(WAZUH_QUEUE)
+        queue_socket.send(message.encode("utf-8"))
+    finally:
+        queue_socket.close()
+
+
+def main():
+    if len(sys.argv) < 2:
+        print(
+            "Error: Wazuh alert file was not provided",
+            file=sys.stderr
+        )
+        return 1
+
+    alert_path = sys.argv[1]
+
+    try:
+        with open(
+            alert_path,
+            "r",
+            encoding="utf-8"
+        ) as alert_file:
+            alert = json.load(alert_file)
+
+        enriched_event = enrich_alert(alert)
+        send_to_wazuh(enriched_event)
+
+        return 0
+
+    except (OSError, json.JSONDecodeError, RuntimeError) as error:
+        print(
+            f"custom-otx error: {type(error).__name__}",
+            file=sys.stderr
+        )
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

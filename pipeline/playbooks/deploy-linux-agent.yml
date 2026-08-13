@@ -1,0 +1,73 @@
+---
+- name: Deploy Wazuh agents to Linux endpoints
+  hosts: linux_agents
+  become: true
+
+  vars:
+    wazuh_manager_address: "192.168.1.10"
+
+  tasks:
+    - name: Install repository requirements
+      ansible.builtin.apt:
+        name:
+          - curl
+          - gnupg
+          - apt-transport-https
+          - ca-certificates
+        state: present
+        update_cache: true
+
+    - name: Download Wazuh signing key
+      ansible.builtin.get_url:
+        url: https://packages.wazuh.com/key/GPG-KEY-WAZUH
+        dest: /tmp/GPG-KEY-WAZUH
+        mode: "0644"
+
+    - name: Create Wazuh repository keyring
+      ansible.builtin.command:
+        cmd: >-
+          gpg --dearmor --yes
+          --output /usr/share/keyrings/wazuh.gpg
+          /tmp/GPG-KEY-WAZUH
+      args:
+        creates: /usr/share/keyrings/wazuh.gpg
+
+    - name: Add Wazuh package repository
+      ansible.builtin.apt_repository:
+        repo: >-
+          deb [signed-by=/usr/share/keyrings/wazuh.gpg]
+          https://packages.wazuh.com/4.x/apt/ stable main
+        filename: wazuh
+        state: present
+        update_cache: true
+
+    - name: Install Wazuh agent
+      ansible.builtin.apt:
+        name: wazuh-agent
+        state: present
+      environment:
+        WAZUH_MANAGER: "{{ wazuh_manager_address }}"
+        WAZUH_AGENT_NAME: "{{ inventory_hostname }}"
+
+    - name: Configure Wazuh manager address
+      ansible.builtin.replace:
+        path: /var/ossec/etc/ossec.conf
+        regexp: "<address>.*?</address>"
+        replace: "<address>{{ wazuh_manager_address }}</address>"
+        backup: true
+
+    - name: Enable and restart Wazuh agent
+      ansible.builtin.systemd:
+        name: wazuh-agent
+        state: restarted
+        enabled: true
+
+    - name: Check Wazuh agent service
+      ansible.builtin.command:
+        cmd: systemctl is-active wazuh-agent
+      register: wazuh_agent_status
+      changed_when: false
+
+    - name: Display Wazuh agent status
+      ansible.builtin.debug:
+        msg: "Wazuh agent status: {{ wazuh_agent_status.stdout }}"

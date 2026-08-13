@@ -1,0 +1,16 @@
+{
+  "timestamp": "2026-08-13T10:15:00Z",
+  "rule": {
+    "id": "100102",
+    "level": 8,
+    "description": "Outbound URL request detected"
+  },
+  "agent": {
+    "id": "001",
+    "name": "test-endpoint",
+    "ip": "192.168.1.20"
+  },
+  "data": {
+    "url": "https://example.com/test"
+  }
+}

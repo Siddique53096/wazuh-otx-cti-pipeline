@@ -1,0 +1,4 @@
+---
+- import_playbook: install-wazuh.yml
+- import_playbook: deploy-linux-agent.yml
+- import_playbook: deploy-cti.yml

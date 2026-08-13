@@ -1,0 +1,17 @@
+{
+  "timestamp": "2026-08-13T10:00:00Z",
+  "rule": {
+    "id": "100100",
+    "level": 8,
+    "description": "Outbound network connection detected"
+  },
+  "agent": {
+    "id": "001",
+    "name": "test-endpoint",
+    "ip": "192.168.1.20"
+  },
+  "data": {
+    "srcip": "192.168.1.20",
+    "dstip": "8.8.8.8"
+  }
+}
